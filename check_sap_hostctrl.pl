@@ -21,7 +21,7 @@ use Getopt::Long;
 my %conf = (
 	timedef		=> "30",
 	sudo 		=> "/usr/bin/sudo su - root -c",
-	sapcontrol 	=> "/usr/sap/hostctrl/exe/sapcontrol",
+	sapcontrol 	=> "/usr/sap/hostctrl/exe/sapcontrol",		
 	ps		=> "/bin/ps -ef",
 	usrbin		=> "/usr/bin",
 	);
@@ -36,15 +36,19 @@ GetOptions(
     "v"         => \$ver,
     "version"   => \$ver,
     "h"         => \$help,
-    "help"      => \$help,
-    "sysnr=i"	=> \$sysnr,
-    "meth=s"    => \$meth,
-    "obj=s"     => \$obj,
-    "backend=s" => \$backend,
-    "warn=o"    => \$warn,
-    "crit=o" 	=> \$crit,
-    "t=i"       => \$timec,
-    "time=i" 	=> \$timec,
+    "help"      => \$help,			
+    "sysnr=i"	=> \$sysnr,			# sapsystem number
+    "meth=s"    => \$meth,			# monitoring methode
+    "obj=s"     => \$obj,			# monitoring object
+    "backend=s" => \$backend,		# type of backend-system
+    "warn=o"    => \$warn,			# warning level
+    "crit=o" 	=> \$crit,			# critical level
+    "t=i"       => \$timec,			# timeout of the check
+    "time=i" 	=> \$timec,			# timeout of the check
+    "sudo=i"	=> \$sudo,			# use or don´t use sudo
+    "host=s"	=> \$host,			# monitored-system
+    "user=s"	=> \$user,			# monitoring user on remote-system
+    "function=s"	=> \$func,			# define the sapcontrol function other then ccms / now: alpha feature
 	);
 
 
@@ -58,12 +62,8 @@ $SIG{ALRM} = \&plugin_timeout;
 eval {
 		alarm ($timeout);
         };
-    
-    
-    
-    
-# precheck
-precheck();    
+     
+
 
 # sap routine
 if ( $meth eq "sap" )
@@ -97,42 +97,65 @@ elsif ( $meth eq "nag" )
 # list objects routine
 elsif ( $meth eq "ls" )
 	{
-		#print "methode -> ls\n";
 		sapctrl_ls();
+	}
+	
+# sapcontrol without ccms function
+elsif ( $meth eq "cons")
+	{
+		sapctrl_cons();
 	}
 	
 	
 	
 sub precheck{
 	# sapstartsrv must running to use the binary sapsontrol. sapstartsrv starts with systemstart.
-	#print "precheck\n";
-	@startsrv_run = `$conf{ps}`;
-	chomp $startsrv_run[0];
-	@gstartsrv = grep /.*sapstartsrv.*$sysnr.*/, @startsrv_run;
-	chomp $gstartsrv[0];
-	#print "$gstartsrv[0]\n";
-	if ( $gstartsrv[0] ne "undev" )
+	# print "precheck\n";
+	@startsrv_run = `ssh $host -l $user '$conf{ps} | grep sapstartsrv | grep $sysnr | grep -v "^$user"'`;
+	$startsrv_num = @startsrv_run;
+				
+	if ( $startsrv_num == "0" )
 		{
-			#print "sapstartsrv is working..\n";
-			$chk_sysnr = `$conf{sudo} "$conf{sapcontrol} -nr $sysnr -function GetProcessList"`;
-			$rc_chk_sysnr = $?;
-			chomp $chk_sysnr;
-			#print "$rc_chk_sysnr\n";
-			if ( $rc_chk_sysnr eq "256" )
-				{
-					print "UNKNOWN - Please check the -sysnr parameter.\n";
-					exit 3;
-				}
+			print "UNKNWON - sapstartsrv not working on host: $host\n";
+			print "You can use sapcontrol to start sapstartsrv!!\n";
+			print "./sapcontrol -nr $sysnr -function StartService <SID>\n";
+			exit 3;
 		}
 	}
 
 sub sapctrl{
-	my $command = `$conf{sudo} "$conf{sapcontrol} -nr $sysnr -function GetAlertTree | $conf{usrbin}/grep -F '$obj'"`;
-	$rc_command = $?;
-	chomp $command;
-	chomp $rc_command;
-	@command_split = split /,/, $command;
-	$command_split[2] =~ s/ //;			# sap returncode (green, yellow, red, gray)
+	if ( $sudo == "1")
+		{
+			#use sapcontrol on remoteinstance with sudo command
+			my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function GetAlertTree' | $conf{usrbin}/grep -F '$obj'"`;
+			$rc_command = $?;
+			if ( $rc_command > "0" )
+				{
+					precheck();
+				}
+			#print "rc->$rc_command\n";
+			chomp $command;
+			chomp $rc_command;
+			@command_split = split /,/, $command;
+			$command_split[2] =~ s/ //;			# sap returncode (green, yellow, red, gray)
+		}
+	else
+		{
+			#use sapcontrol on icinga-host
+			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree | $conf{usrbin}/grep -F '$obj'`;
+			$rc_command = $?;
+			if ( $rc_command > "0" )
+				{
+					precheck();
+				}
+			#print "rc->$rc_command\n";
+			chomp $command;
+			chomp $rc_command;
+			@command_split = split /,/, $command;
+			$command_split[2] =~ s/ //;			# sap returncode (green, yellow, red, gray)
+		}
+	
+	
 	if ( $obj ne "Shortdumps" )
 		{
 			$command_split[3] =~ s/ //g;		# sap result		
@@ -161,28 +184,75 @@ sub sapctrl{
 			}
  	}
 	
+sub sapctrl_cons{
+	if ( $sudo == "1")
+		{
+			#use sapcontrol on remoteinstance with sudo command
+			my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function $func'"`;
+			print "$command\n";
+		}
+	else
+		{
+			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function $func`;
+			print "$command\n";
+		}
+}
+
 sub sapctrl_ls{
 	if ( $meth eq "ls" )
 			{
-				my $command = `$conf{sudo} "$conf{sapcontrol} -nr $sysnr -function GetAlertTree"`;
-				#print "$command\n";
-				my @command_split = split /\n/, $command;
-				$stanza = @command_split;
-				#print "count: $stanza\n";
-				$b = 10;
-				for ( $i=0; $i<$stanza; $i++)
+				if ( $sudo == "1")
 					{
-						my @outsplit = split /,/, $command_split[$b];
-						my @advsplit = split /;/, $outsplit[5];
-						print "Pos.0->Monitoring object, Pos.2->SAP Alarmlevel, Pos.3->Value; Pos.72->Advanced-Value\n";
-						print "Pos.0->$outsplit[0], Pos.2->$outsplit[2], Pos.3->$outsplit[3]; Pos.72->$advsplit[71]\n";
-						#print "ADV->@advsplit\n";
-						#print "ADV1->$advsplit[71]\n";
-						#$lenght = @advsplit;
-						#print "laenge -> $lenght\n";
-						print "sap-output:\n";
-						print "$command_split[$b]\n";
+						#use sapcontrol on remoteinstance with sudo command
+						my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function GetAlertTree -format script'"`;
+						#print "$command\n";
+						@command_split = split /;$/m, $command; #Split nach ID´s getrennt
+						#print "@command_split\n";
+						$stanza = @command_split;
+						#print "count: $stanza\n";						
+					}
+				else
+					{
+						#use sapcontrol on icinga-host
+						my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree -format script`;
+						#print "$command\n";
+						@command_split = split /;$/m, $command; #Split nach ID´s getrennt
+						#print "@command_split\n";
+						$stanza = @command_split;
+						#print "count: $stanza\n";
+								
+					}
+				
+				
+				$b = 1;
+				for ( $i=0; $i<$stanza-2; $i++)
+					{		
+						my @detail = split /\n/, $command_split[$b];
+						#print "@detail\n";
+						my @object = split /:/, $detail[1];
+						#$object[1] =~ s/ //g;
+						my @id = split / /, $detail[1];
+						my @parent = split /:/, $detail[2];
+						$parent[1] =~ s/ //g;
+						my @alarmlevel = split /:/, $detail[3];
+						$alarmlevel[1] =~ s/ //g;
+						my @desc = split /:/, $detail[4];
+					
+						#$desc[1] =~ s/ //g;
+						#print "commandsplit: $command_split[$b]\n";
+						#print "Object: $detail[1]\n";
+						#print "ALARMLEVEL: $detail[3]\n";
+						
+						
+						print "id:$id[0]\n";
+						print "parentid:$parent[1]\n";
+						print "Object:$object[1]\n";
+						print "ALARMLEVEL:$alarmlevel[1]\n";
+						print "Description:$desc[1]\n";
 						print "\n";
+						print "\n";
+						
+						
 						$b += 1;
 					}
 				
@@ -330,17 +400,20 @@ sub help{
 			{
 			print "\n";
 			print "Usage:\n";
-			print "	check_host_ctrl.pl -sysnr <SAP-SYS-NR> -meth <sap|nag|ls> -obj <MONITORING-OBJEKT> -backend <abap|java|trex> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC>\n";
+			print "	check_host_ctrl.pl -host <HOSTNAME only with local sapcontrol> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls|cons> -obj <MONITORING-OBJEKT> -backend <abap|java|trex> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC> -sudo <0|1>\n";
 			print "\n";
 			print "Optionen:\n";
 			print "\n";
-			print "	-sysnr: SAP-System-NR";
+			print "	-host: HOSTNAME\n";
+			print "\n";
+			print "	-sysnr: SAP-System-NR\n";
 			print "\n";
 			print "\n";
-			print "	-meth: <sap|nag|ls>\n";
+			print "	-meth: <sap|nag|ls|cons>\n";
 			print "		sap:	The alarmlevels are used from sap-ccms-methode ta:rz20. The SAP-LEVEL are GREEN, YELLOW, RED, GRAY.\n";
 			print "		nag:	The alarmlevel warning or critical are used from nagios. This options are -w (warning) and -c (critical).\n";
 			print "		ls:	List the monitoring tree with all objects.\n";
+			print "		cons:	You can use other objects without ccms. For more information use sapcontrol -h. Now it is a alpha feature.\n";
 			print "\n";
 			print "	-obj: <MONITORING-OBJECT>\n";
 			print "		abap ->\n";
@@ -410,6 +483,10 @@ sub help{
 			print "\n";
 			print "	-t: plugin timeout, default: 30 sec.\n";
 			print "\n";
+			print "	-sudo: 1\n";
+			print "		This parameter is optional. You can use it if you start the sapcontrol check off remote host not on icinga-system.\n";
+			print "		If you set the parameter to 1 the icinga-system check with ssh and sudo command on remote-site\n";
+			print "\n";
 			print "Help:\n";
 			print "	Error:\n";
 			print "		GetAlertTree FAIL: NIECONN_REFUSED (Connection refused), NiRawConnect failed in plugin_fopen -> The sap-system-nr is incorrect.\n";
@@ -418,12 +495,22 @@ sub help{
 			print "		The Check-Plugin use the sapcontrol binary (/usr/sap/hostctrl/exe/sapcontrol). The binary use the account <root> to connect to the system.\n";
 			print "		This is sap-standard!\n";
 			print "		You can use the sapcontrol for many things. Start,stop, monitoring and so on.....\n";
-			print "		The check_plugin should only use with your nagios-user and check per ssh the remote-machine.\n";
-			print "		This is the command ->\n";
-			print "	 		sudo su - root -c /usr/sap/hostctrl/exe/sapcontrol\n";
 			print "\n";
-			print "		The sudo-file on the remote-machine have this entry:\n";
-			print "			%nagios  ALL=(ALL)       NOPASSWD: /bin/su - root -c /usr/sap/hostctrl/exe/sapcontrol -nr * -function GetAlertTree*\n";
+			print "		I have to methodes to use this check.\n";
+			print "			You can use the sapcontrol-binarie from the remote-machine.\n";
+			print "				If you use this you must configure the sudo command on the remote-machine and the icinga-check is a ssh check.\n";
+			print "				The check_plugin should only use with your nagios-user and check per ssh the remote-machine.\n";
+			print "				This is the command ->\n";
+			print "	 				sudo su - root -c /usr/sap/hostctrl/exe/sapcontrol\n";
+			print "				Adv:	no software installation on the icinga-system\n";
+			print "				DisAdv:	all sapchecks use a ssh-call\n";
+			print "\n";
+			print "				The sudo-file on the remote-machine have this entry:\n";
+			print "				%nagios  ALL=(ALL)       NOPASSWD: /bin/su - root -c /usr/sap/hostctrl/exe/sapcontrol -nr * -function GetAlertTree*\n";
+			print "\n";
+			print "			Or you must install the hostctrl on the icinga-system.\n";
+			print "				You can use the sapcontrol-binarie directly from icinga-system without ssh and sudo.\n";
+			print "				That is the preferred way!!\n";
 			print "\n";
 			print "	Monitoring-Objects:\n";
 			print "		If you want other monitoring objects you can use on the sap-system the command:\n";
@@ -434,7 +521,20 @@ sub help{
 			print "\n";
 			print "Version: check_host_ctrl.pl -v\n";
 			print "\n";
-		}
+			print "Syntax: check_host_ctrl.pl -host <hostname> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls> -obj <MONITORING-OBJEKT> -backend <abap|java|trex> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC>\n";
+			print "\n";
+			print "Examples:\n";
+			print "\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth ls\n";
+			print "		List all montoring-objects from the backend\n";
+			print "\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth ls -sudo 1\n";
+			print "		List all monitoring-objects from backend, but use the sapcontrol binarie from backend-system with ssh connection and sudo command\n";
+			print "\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth nag -obj CacheHits -backend abap\n";
+			print "		Output of sap-abap cachehits\n";
+			print "\n";
+	}
 }
 
 sub version{
@@ -451,6 +551,7 @@ sub version{
 				print "	0.5.1 -> change output values for java-systems, correct performance outout for java servernodes\n";
 				print "	      -> correct sap-output gray, trex monitoring extended\n";
 				print "	0.5.2 -> correction of abap shortdump, meth: ls extended\n";
+				print "	0.5.3 -> change sapcontrol-output from list to script, use sapcontrol with ssh on remote-machine or with hostctrl-client on icinga-host\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
