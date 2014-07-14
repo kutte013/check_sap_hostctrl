@@ -109,18 +109,36 @@ elsif ( $meth eq "cons")
 	
 	
 sub precheck{
-	# sapstartsrv must running to use the binary sapsontrol. sapstartsrv starts with systemstart.
-	# print "precheck\n";
-	@startsrv_run = `ssh $host -l $user '$conf{ps} | grep sapstartsrv | grep $sysnr | grep -v "^$user"'`;
-	$startsrv_num = @startsrv_run;
-				
-	if ( $startsrv_num == "0" )
+	if ( $sudo == "1" )
 		{
-			print "UNKNWON - sapstartsrv not working on host: $host\n";
-			print "You can use sapcontrol to start sapstartsrv!!\n";
-			print "./sapcontrol -nr $sysnr -function StartService <SID>\n";
-			exit 3;
+			# sapstartsrv must running to use the binary sapsontrol. sapstartsrv starts with systemstart.
+			# print "precheck\n";
+			@startsrv_run = `ssh $host -l $user '$conf{ps} | grep sapstartsrv | grep $sysnr | grep -v "^$user"'`;
+			$startsrv_num = @startsrv_run;
+				
+			if ( $startsrv_num == "0" )
+				{
+					print "UNKNWON - sapstartsrv not working on host: $host\n";
+					print "You can use sapcontrol to start sapstartsrv!!\n";
+					print "./sapcontrol -nr $sysnr -function StartService <SID>\n";
+					exit 3;
+				}		
 		}
+	else
+		{
+			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetSystemInstanceList`;
+			my $rc_command = $?;
+			if ( $rc_command > "0" )
+				{
+					print "UNKNWON - sapstart not working on host: $host or the systemnumber is wrong.\n";
+					print "You can use the following command on the remote-system:\n";
+					print "./sapcontrol -nr $sysnr -function StartService <SID>\n";
+					print "$command\n";
+					exit 3;		
+				}
+			
+		}
+	
 	}
 
 sub sapctrl{
@@ -552,6 +570,7 @@ sub version{
 				print "	      -> correct sap-output gray, trex monitoring extended\n";
 				print "	0.5.2 -> correction of abap shortdump, meth: ls extended\n";
 				print "	0.5.3 -> change sapcontrol-output from list to script, use sapcontrol with ssh on remote-machine or with hostctrl-client on icinga-host\n";
+				print "	0.5.4 -> ssh bug in precheck routine\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
