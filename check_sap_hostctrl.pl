@@ -82,7 +82,16 @@ if ( $meth eq "sap" )
 # nagios routine	
 elsif ( $meth eq "nag" )
 	{
-	sapctrl();
+		if ( $warn ne undef && $crit ne undef )
+			{
+				sapctrl();		
+			}
+		else
+			{
+				print "UNKNOWN - you must define a warning-level and a critical level with monitoring-methode nag.\n";
+				exit 3;
+			}
+		
 	if ( $rc_command == 0 )
 		{	
 			nagroutine_out();
@@ -147,6 +156,7 @@ sub sapctrl{
 			#use sapcontrol on remoteinstance with sudo command
 			my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function GetAlertTree' | $conf{usrbin}/grep -F '$obj'"`;
 			$rc_command = $?;
+			#print "$command\n";
 			if ( $rc_command > "0" )
 				{
 					precheck();
@@ -156,21 +166,46 @@ sub sapctrl{
 			chomp $rc_command;
 			@command_split = split /,/, $command;
 			$command_split[2] =~ s/ //;			# sap returncode (green, yellow, red, gray)
+			$command_split[3] =~ s/ //;			# sap performance value
+			@perf = split / /, $command_split[3];
+			
+			$monitoring_object = $command_split[0];		# monitoring-objekt 						-> only doku, nothing todo with this variable
+			$sap_returncode = $command_split[2];		# sap returncode (green, yellow, red, gray) -> only doku, nothing todo with this variable
+			$perf_value = $perf[0];						# performance value 						
+			$perf_unit = $perf[1];						# performance unit
+			chomp $monitoring_object;
+			chomp $sap_returncode;
+			chomp $perf[1];
+			chomp $perf[2];
+			#print "obj:$monitoring_object, rc:$sap_returncode, perf_val:$perf_value"."$perf_unit\n";
 		}
 	else
 		{
 			#use sapcontrol on icinga-host
-			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree | $conf{usrbin}/grep -F '$obj'`;
+			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree | $conf{usrbin}/grep -w '$obj'`;
 			$rc_command = $?;
 			if ( $rc_command > "0" )
 				{
 					precheck();
 				}
-			#print "rc->$rc_command\n";
+			#print "output->$command\n";
+			#rint "rc->$rc_command\n";
 			chomp $command;
 			chomp $rc_command;
 			@command_split = split /,/, $command;
 			$command_split[2] =~ s/ //;			# sap returncode (green, yellow, red, gray)
+			$command_split[3] =~ s/ //;			# sap performance value
+			@perf = split / /, $command_split[3];
+			
+			$monitoring_object = $command_split[0];		# monitoring-objekt 						-> only doku, nothing todo with this variable
+			$sap_returncode = $command_split[2];		# sap returncode (green, yellow, red, gray) -> only doku, nothing todo with this variable
+			$perf_value = $perf[0];						# performance value 						
+			$perf_unit = $perf[1];						# performance unit
+			chomp $monitoring_object;
+			chomp $sap_returncode;
+			chomp $perf[1];
+			chomp $perf[2];
+			#print "obj:$monitoring_object, rc:$sap_returncode, perf_val:$perf_value"."$perf_unit\n";
 		}
 	
 	
@@ -207,13 +242,213 @@ sub sapctrl_cons{
 		{
 			#use sapcontrol on remoteinstance with sudo command
 			my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function $func'"`;
-			print "$command\n";
+			my $com_grep = grep /FAIL/, $command;
+			#print "$command\n";
+			#print "$com_grep\n";
+			if ( $com_grep != 0 )
+				{
+					print "UNKNOWN - $command\n";
+					exit 3;
+				}
+			if ( $func eq "ABAPGetWPTable" )
+				{
+					abapgetwptable();
+					nagroutine_out();
+					
+				}
 		}
 	else
 		{
-			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function $func`;
-			print "$command\n";
+			# use sapcontrol client from nagios-server
+			$command = `$conf{sapcontrol} -host $host -nr $sysnr -function $func`;
+			my $com_grep = grep /FAIL/, $command;
+			#print "$command\n";
+			#print "$com_grep\n";
+			if ( $com_grep != 0 )
+				{
+					print "UNKNOWN - $command\n";
+					exit 3;
+				}
+			if ( $func eq "ABAPGetWPTable" )
+				{
+					abapgetwptable();
+					nagroutine_out();
+					
+				}			
 		}
+}
+
+sub abapgetwptable{
+	@wptable = split /\n/, $command;
+	# number of all sap processes
+	my $sum_wp = @wptable;
+	#print "$sum_wp\n";
+		
+	# number of dialog proc
+	@dia = grep /DIA/, @wptable;
+	my $sum_dia = @dia;
+	@dia_run = grep /Run/, @dia;
+	my $sum_diarun = @dia_run;
+	$perc_used_dia = int($sum_diarun*100/$sum_dia);
+	$dia_use = "DIA $sum_diarun/$sum_dia $perc_used_dia";
+	@dia_sort = split / /, $dia_use;
+	#print "$dia_use\n";
+		
+	# number of upd proc
+	@upd = grep /UPD/, @wptable;
+	my $sum_upd = @upd;
+	@upd_run = grep /Run/, @upd;
+	my $sum_updrun = @upd_run;
+	$perc_used_upd = int($sum_updrun*100/$sum_upd);
+	$upd_use = "UPD $sum_updrun/$sum_upd $perc_used_upd";
+	@upd_sort = split / /, $upd_use;
+	#print "$upd_use\n";
+					
+	# number of enq proc
+	@enq = grep /ENQ/, @wptable;
+	my $sum_enq = @enq;
+	#print "ENQ: $sum_enq\n";
+					
+	# number of BTC proc
+	@btc = grep /BTC/, @wptable;
+	my $sum_btc = @btc;
+	@btc_run = grep /Run/, @btc;
+	my $sum_btcrun = @btc_run;
+	$perc_used_btc = int($sum_btcrun*100/$sum_btc);
+	$btc_use = "BTC $sum_btcrun/$sum_btc $perc_used_btc";
+	@btc_sort = split / /, $btc_use;
+	#print "$btc_use\n";
+				
+	# number of spool proc
+	@spo = grep /SPO/, @wptable;
+	my $sum_spo = @spo;
+	@spo_run = grep /Run/, @spo;
+	my $sum_sporun = @spo_run;
+	$perc_used_spo = int($sum_sporun*100/$sum_spo);
+	$spo_use = "SPO $sum_sporun/$sum_spo $perc_used_spo";
+	@spo_sort = split / /, $spo_use;
+	#print "$spo_use\n";
+					
+	# number of up2 proc
+	@up2 = grep /UP2/, @wptable;
+	my $sum_up2 = @up2;
+	#print "SUM_UP2: $sum_up2\n";
+	if ( $sum_up2 > 0 )
+		{
+			@up2_run = grep /Run/, @up2;
+			my $sum_up2run = @up2_run;
+			$perc_used_up2 = int($sum_up2run*100/$sum_up2);
+			$up2_use = "UP2 $sum_up2run/$sum_up2 $perc_used_up2";
+			@up2_sort = split / /, $up2_use;
+			#print "$up2_use\n";
+		}
+	else
+		{
+			# up2 processes not configured, set the variable manually to zero
+			$perc_used_up2 = "0";
+			$up2_use = "UP2 0/0 $perc_used_up";
+			@up2_sort = split / /, $up2_use;
+			
+		}
+		
+	
+	
+	# sort highest alarmlevel, this generate the alarmevent critial, warning or ok 
+	@alarmlevel = ("$perc_used_btc", "$perc_used_dia", "$perc_used_spo", "$perc_used_up2", "$perc_used_upd");
+	@sort_alarm = reverse sort { $a <=> $b } @alarmlevel;
+	#print "@alarmlevel\n";
+	#print "@sort_alarm\n";
+	$value = $sort_alarm[0];
+ 	$perf_unit = "%";
+	
+	
+		
+	@grep_dia = grep /$value/, @dia_sort;
+	@grep_btc = grep /$value/, @btc_sort;
+	@grep_upd = grep /$value/, @upd_sort;
+	@grep_up2 = grep /$value/, @up2_sort;
+	@grep_spo = grep /$value/, @spo_sort;
+	
+	
+	if ( @grep_dia != "0" )
+		{
+			$multi_obj = "$dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_perf = "'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
+			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			#print "$multi_obj|$multi_perf\n";
+		}
+	elsif ( @grep_btc != "0")
+		{
+			$multi_obj = "$btc_use$perf_unit\n $dia_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_perf = "'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
+			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			#print "$multi_obj|$multi_perf\n";
+		}
+	elsif ( @grep_upd != "0")
+		{
+			$multi_obj = "$upd_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_perf = "'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			#print "$multi_obj|$multi_perf\n";
+		}
+	elsif ( @grep_spo != "0")
+		{
+			$multi_obj = "$spo_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $up2_use$perf_unit";
+			$multi_perf = "'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
+			","."'$upd_sort[0]'="."$spo_sort[2]"."$perf_unit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			#print "$multi_obj|$multi_perf\n";
+		}
+	elsif ( @grep_up2 != "0")
+		{
+			$multi_obj = "$up2_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit";
+			$multi_perf = "'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
+			","."'$upd_sort[0]'="."$spo_sort[2]"."$perf_unit".
+			","."'$spo_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			#print "$multi_obj|$multi_perf\n";
+		}
+	
+	
+	
+					
+	my $a = 5;
+	for ( $i=0; $i<$sum_wp-5; $i++)
+			{
+				# for debug proc-table
+				#print "$wptable[$a]\n";
+				$a += 1;		
+			}		
+	
+	
+	#print "DIALOG-PROC: @dia\n";
+	#print "DIALIG-PROC-RUNNING:@dia_run\n";
+		
+			# detail output of running proc´s, now disabled
+			# idea: use this for detail-analyse of running procs 
+			#$d = 0;
+			#for ( $i=0; $i<$sum_diarun; $i++)
+			#	{
+			#		@run_proc = split /,/, $dia_run[$d];
+			#		print "PROC-ID:$run_proc[2] TIME:$run_proc[9] PROGRAM:$run_proc[10] USER:$run_proc[12] ACT:$run_proc[13] TABLE:$run_proc[14]\n";				
+			#		$d += 1;
+			#	}	
+	
+	
+	
+	
 }
 
 sub sapctrl_ls{
@@ -223,7 +458,14 @@ sub sapctrl_ls{
 					{
 						#use sapcontrol on remoteinstance with sudo command
 						my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function GetAlertTree -format script'"`;
+						my $com_grep = grep /FAIL/, $command;
 						#print "$command\n";
+						#print "$com_grep\n";
+						if ( $com_grep != 0 )
+							{
+								print "UNKNOWN - $command\n";
+								exit 3;
+							}
 						@command_split = split /;$/m, $command; #Split nach ID´s getrennt
 						#print "@command_split\n";
 						$stanza = @command_split;
@@ -232,46 +474,41 @@ sub sapctrl_ls{
 				else
 					{
 						#use sapcontrol on icinga-host
-						my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree -format script`;
+						my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree`;
+						my $com_grep = grep /FAIL/, $command;
 						#print "$command\n";
+						#print "$com_grep\n";
+						if ( $com_grep != 0 )
+							{
+								print "UNKNOWN - $command\n";
+								exit 3;
+							}
 						@command_split = split /;$/m, $command; #Split nach ID´s getrennt
 						#print "@command_split\n";
 						$stanza = @command_split;
 						#print "count: $stanza\n";
-								
+						#print "was kommt hier: $command_split[1]\n";
 					}
 				
 				
-				$b = 1;
+				$b = 10;
 				for ( $i=0; $i<$stanza-2; $i++)
 					{		
-						my @detail = split /\n/, $command_split[$b];
-						#print "@detail\n";
-						my @object = split /:/, $detail[1];
-						#$object[1] =~ s/ //g;
-						my @id = split / /, $detail[1];
-						my @parent = split /:/, $detail[2];
-						$parent[1] =~ s/ //g;
-						my @alarmlevel = split /:/, $detail[3];
-						$alarmlevel[1] =~ s/ //g;
-						my @desc = split /:/, $detail[4];
 					
-						#$desc[1] =~ s/ //g;
-						#print "commandsplit: $command_split[$b]\n";
-						#print "Object: $detail[1]\n";
-						#print "ALARMLEVEL: $detail[3]\n";
-						
-						
-						print "id:$id[0]\n";
-						print "parentid:$parent[1]\n";
-						print "Object:$object[1]\n";
-						print "ALARMLEVEL:$alarmlevel[1]\n";
-						print "Description:$desc[1]\n";
-						print "\n";
-						print "\n";
-						
-						
-						$b += 1;
+						 my @outsplit = split /,/, $command_split[$b];
+                         my @advsplit = split /;/, $outsplit[5];
+	                     print "Pos.0->Monitoring object, Pos.2->SAP Alarmlevel, Pos.3->Value; Pos.72->Advanced-Value\n";
+                         $outsplit[0] =~ s/\n//;
+                         print "Pos.0->$outsplit[0]\nPos.2->$outsplit[2]\nPos.3->$outsplit[3]\nPos.72->$advsplit[71]\n";
+                         #print "ADV->@advsplit\n";
+                         #print "ADV1->$advsplit[71]\n";
+                         #$lenght = @advsplit;
+                         #print "laenge -> $lenght\n";
+                         #print "sap-output:\n";
+                         #print "$command_split[$b]\n";
+                         print "\n";
+                        
+						 $b += 1;
 					}
 				
 			}
@@ -340,21 +577,23 @@ sub unknown_obj{
 	}
 	
 sub nagroutine_out{
+	
 	if ( $warn < $crit )
 		{
-			if ( $command_split[3] < $warn && ($backend eq "abap" || $backend eq "trex") )
+			# print "2\n"; 					# for debugging only
+			if ( $perf_value < $warn && ($backend eq "abap" || $backend eq "trex") )
 				{
-					print "OK - $obj $command_split[3]|$obj=$command_split[3]\n";
+					print "OK - $obj $perf_value"."$perf_unit|$obj=$perf_value"."$perf_unit\n";
         			exit 0;
        			}
-			elsif ( ($command_split[3] >= $warn && $command_split[3] < $crit ) && ($backend eq "abap" || $backend eq "trex"))
+			elsif ( ( $perf_value >= $warn && $perf_value < $crit ) && ($backend eq "abap" || $backend eq "trex"))
 				{
-					print "WARNING - $obj $command_split[3]|$obj=$command_split[3]\n";
+					print "WARNING - $obj $perf_value"."$perf_unit|$obj=$perf_value"."$perf_unit\n";
        				exit 1;
        			}
-			elsif ( $command_split[3] >= $crit && ($backend eq "abap" || $backend eq "trex") )
+			elsif ( $perf_value >= $crit && ($backend eq "abap" || $backend eq "trex") )
 				{
-					print "CRITICAL - $obj $command_split[3]|$obj=$command_split[3]\n";
+					print "CRITICAL - $obj $perf_value"."$perf_unit|$obj=$perf_value"."$perf_unit\n";
         			exit 2;
 				}
 			elsif ( $greatest < $warn && $backend eq "java" )
@@ -372,22 +611,38 @@ sub nagroutine_out{
 					print "CRITICAL - @other|@other\n";
         			exit 2;
 				}
+			elsif ( $value < $warn && $backend eq "multi" )
+				{
+					print "OK - $multi_obj|$multi_perf\n";
+					exit 0;
+				}
+			elsif ( ( $value >= $warn && $value < $crit ) && $backend eq "multi")
+				{
+					print "WARNING - $multi_obj|$multi_perf\n";
+       				exit 1;
+       			}
+			elsif ( $value >= $crit && $backend eq "multi" )
+				{
+					print "CRITICAL - $multi_obj|$multi_perf\n";
+        			exit 2;
+				}
 		}
 	elsif ( $warn > $crit)
 		{
-			if ( $command_split[3] > $warn && ($backend eq "abap" || $backend eq "trex"))
+			# print "3\n";				# for debuggin only
+			if ( $perf_value > $warn && ($backend eq "abap" || $backend eq "trex"))
 				{
-        			print "OK - $obj $command_split[3]|$obj=$command_split[3]\n";
+        			print "OK - $obj $perf_value"."$perf_unit|$obj=$perf_value"."$perf_unit\n";
         			exit 0;
        			}
-			elsif ( ($command_split[3] <= $warn && $command_split[3] > $crit) && ($backend eq "abap" || $backend eq "trex") )
+			elsif ( ($perf_value <= $warn && $perf_value > $crit) && ($backend eq "abap" || $backend eq "trex") )
 				{
-        			print "WARNING - $obj $command_split[3]|$obj=$command_split[3]\n";
+        			print "WARNING - $obj $perf_value"."$perf_unit|$obj=$perf_value"."$perf_unit\n";
        				exit 1;
        			}
-			elsif ( $command_split[3] <= $crit && ($backend eq "abap" || $backend eq "trex"))
+			elsif ( $perf_value <= $crit && ($backend eq "abap" || $backend eq "trex"))
 				{
-    				print "CRITICAL - $obj $command_split[3]|$obj=$command_split[3]\n";
+    				print "CRITICAL - $obj $perf_value"."$perf_unit|$obj=$perf_value"."$perf_unit\n";
         			exit 2;
 				}
 			elsif ( $greatest > $warn && $backend eq "java" )
@@ -405,6 +660,21 @@ sub nagroutine_out{
     				print "CRITICAL - @other|@other\n";
         			exit 2;
 				}
+			elsif ( $value > $warn && $backend eq "multi" )
+				{
+					print "OK - $multi_obj|$multi_perf\n";
+					exit 0;
+				}
+			elsif ( ( $value <= $warn && $value > $crit ) && $backend eq "multi")
+				{
+					print "WARNING - $multi_obj|$multi_perf\n";
+       				exit 1;
+       			}
+			elsif ( $value <= $crit && $backend eq "multi" )
+				{
+					print "CRITICAL - $multi_obj|$multi_perf\n";
+        			exit 2;
+				}
 		}
 }
 
@@ -418,7 +688,7 @@ sub help{
 			{
 			print "\n";
 			print "Usage:\n";
-			print "	check_host_ctrl.pl -host <HOSTNAME only with local sapcontrol> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls|cons> -obj <MONITORING-OBJEKT> -backend <abap|java|trex> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC> -sudo <0|1>\n";
+			print "	check_host_ctrl.pl -host <HOSTNAME only with local sapcontrol> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls|cons> -<obj|function> <MONITORING-OBJEKT> -backend <abap|java|trex|multi> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC> -sudo <0|1>\n";
 			print "\n";
 			print "Optionen:\n";
 			print "\n";
@@ -431,7 +701,7 @@ sub help{
 			print "		sap:	The alarmlevels are used from sap-ccms-methode ta:rz20. The SAP-LEVEL are GREEN, YELLOW, RED, GRAY.\n";
 			print "		nag:	The alarmlevel warning or critical are used from nagios. This options are -w (warning) and -c (critical).\n";
 			print "		ls:	List the monitoring tree with all objects.\n";
-			print "		cons:	You can use other objects without ccms. For more information use sapcontrol -h. Now it is a alpha feature.\n";
+			print "		cons:	You can use other objects without ccms. For more information use sapcontrol -h.\n";
 			print "\n";
 			print "	-obj: <MONITORING-OBJECT>\n";
 			print "		abap ->\n";
@@ -452,11 +722,6 @@ sub help{
 			print "			FrontendResponseTime		-> Frontend Response Time msec\n";
 			print "			UsersLoggedIn			-> Number of Users logged in\n";
 			print "			LDAP_RFC-01\\Status		-> LDAP Connector 01 State\n";			
-			print "			LDAP_RFC-02\\Status		-> LDAP Connector 02 State\n";
-			print "			LDAP_RFC-03\\Status		-> LDAP Connector 03 State\n";
-			print "			LDAP_RFC-04\\Status		-> LDAP Connector 04 State\n";
-			print "			LDAP_RFC-05\\Status		-> LDAP Connector 05 State\n";
-			print "			LDAP_RFC-06\\Status		-> LDAP Connector 06 State\n";
 			print "			EM Used				-> Extended Memory Usage %\n";
 			print "			R3RollUsed			-> Roll area usage %\n";
 			print "			Shortdumps			-> ABAP Shortdumps st22. You should use with -obj: sap\n";
@@ -490,10 +755,14 @@ sub help{
 			print "			Index Status			-> Index State\n";
 			print "			Build				-> TREX Version\n";
 			print "\n";
+			print "	-function: use this with -meth: cons\n";
+			print "		ABAPGetWPTable -> Processtable of sap-system ( dia-proc, btc-proc, upd-proc, spo-proc, up2-proc )\n";
+			print "\n";
 			print "	-backend: Type of sap-backend system\n";
 			print "		abap: abap-backend-system\n";
 			print "		java: java-backend-system\n";
 			print "		trex: trex-backend-system\n";
+			print "		multi: multiline output for meth: cons\n";
 			print "\n";
 			print "	-w: warning-level\n";
 			print "\n";
@@ -508,6 +777,10 @@ sub help{
 			print "Help:\n";
 			print "	Error:\n";
 			print "		GetAlertTree FAIL: NIECONN_REFUSED (Connection refused), NiRawConnect failed in plugin_fopen -> The sap-system-nr is incorrect.\n";
+			print "\n";
+			print "		FAIL: HTTP error, HTTP/1.1 401 Unauthorized -> You use a new sap-kernel binarie. In this new version the sapstartsrv service have security features enabled.\n";
+			print "		Set the paramter service/protectedwebmethods=NONE in the sap-instance profile. NONE->sapstartsrv-security-features disabled\n";
+			print "		For more information have a look at SAP-Note 927637.\n"; 
 			print "\n";
 			print "	Others:\n";
 			print "		The Check-Plugin use the sapcontrol binary (/usr/sap/hostctrl/exe/sapcontrol). The binary use the account <root> to connect to the system.\n";
@@ -531,15 +804,15 @@ sub help{
 			print "				That is the preferred way!!\n";
 			print "\n";
 			print "	Monitoring-Objects:\n";
-			print "		If you want other monitoring objects you can use on the sap-system the command:\n";
+			print "		If you want other monitoring objects from ccms, please use the command:\n";
 			print "		/usr/sap/hostctrl/exe/sapcontrol -nr <SYSNR> -function GetAlertTree\n";
 			print "		or\n";
-			print "		check_host_ctrl.pl -nr <SYSNR> -meth ls\n";
+			print "		check_host_ctrl.pl -host <HOSTNAME> -nr <SYSNR> -meth ls\n";
 			print "		to investigate which objects are available.\n";
 			print "\n";
 			print "Version: check_host_ctrl.pl -v\n";
 			print "\n";
-			print "Syntax: check_host_ctrl.pl -host <hostname> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls> -obj <MONITORING-OBJEKT> -backend <abap|java|trex> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC>\n";
+			print "Syntax: check_host_ctrl.pl -host <hostname> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls|cons> -<obj|function> <OBJEKT> -backend <abap|java|trex|multi> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC>\n";
 			print "\n";
 			print "Examples:\n";
 			print "\n";
@@ -549,8 +822,14 @@ sub help{
 			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth ls -sudo 1\n";
 			print "		List all monitoring-objects from backend, but use the sapcontrol binarie from backend-system with ssh connection and sudo command\n";
 			print "\n";
-			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth nag -obj CacheHits -backend abap\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth sap -obj CacheHits -backend abap\n";
 			print "		Output of sap-abap cachehits\n";
+			print "\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth nag -obj CacheHits -backend abap -w 60 -c 80\n";
+			print "		Output of sap-abap cachehits with alarmlevel from nagios-system\n";
+			print "\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth cons -function ABAPGetWPTable -backend multi -w 80 -c 90\n";
+			print "		Output of sap-processes, DIA-Usage, BTC-Usage, SPO-Usage, UPD-Usage, UP2-Usage\n";
 			print "\n";
 	}
 }
@@ -567,10 +846,17 @@ sub version{
 				print "	0.4.1 -> sapctrl command with global-var\n";
 				print "	0.5 -> change pnp performance values for abap-systems\n";
 				print "	0.5.1 -> change output values for java-systems, correct performance outout for java servernodes\n";
-				print "	      -> correct sap-output gray, trex monitoring extended\n";
-				print "	0.5.2 -> correction of abap shortdump, meth: ls extended\n";
+				print "		-> correct sap-output gray, trex monitoring extended\n";
+				print "	0.5.2 -> correction of abap shortdump\n";
 				print "	0.5.3 -> change sapcontrol-output from list to script, use sapcontrol with ssh on remote-machine or with hostctrl-client on icinga-host\n";
 				print "	0.5.4 -> ssh bug in precheck routine\n";
+				print "	0.5.5 -> change sub sapctrl for performance value and unit\n";
+				print "		-> you must use with meth=nag a warning and critical level\n";
+				print "		-> add backend-type: multi -> use for multiline output\n";
+				print "		-> add meth-type: cons with -function ABAPGetWPTable\n";
+				print "		-> add a new message about message 'not authorized output'\n";
+				print "		-> change sub sapctrl grep option from -F to -w\n";
+				print "		-> we found sap-systems without up2 processes, now we check the number of up2 processes\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
