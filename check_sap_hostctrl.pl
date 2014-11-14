@@ -19,11 +19,15 @@
 use Getopt::Long;
 
 my %conf = (
-	timedef		=> "30",
-	sudo 		=> "/usr/bin/sudo su - root -c",
-	sapcontrol 	=> "/usr/sap/hostctrl/exe/sapcontrol",		
-	ps		=> "/bin/ps -ef",
-	usrbin		=> "/usr/bin",
+	timedef		=> "30",									# timeout of plugin
+	sudo 		=> "/usr/bin/sudo su - root -c",			# path to sudo command
+	sapcontrol 	=> "/usr/sap/hostctrl/exe/sapcontrol",		# path to sapcontrol binarie
+	ps			=> "/bin/ps -ef",							# path to ps command
+	usrbin		=> "/usr/bin",								# path to /usr/bin
+	diatime		=> "5",										# timevalue for dialogprocesses, only the dialogprocesses with a runtime over 5 sec. are interrested
+	btctime		=> "1800",									# timevalue for batchprocesses, only the batchprocesses with a runtime over 30 sec. are interrested
+	updtime		=> "30",									# timevalue for upd- and up2 processes, only the upd- and up2-processes with a runtime over 5 sec. are interrested
+	spotime		=> "60",
 	);
 
 
@@ -283,62 +287,255 @@ sub abapgetwptable{
 	# number of all sap processes
 	my $sum_wp = @wptable;
 	#print "$sum_wp\n";
-		
+	
+	
+	
 	# number of dialog proc
 	@dia = grep /DIA/, @wptable;
 	my $sum_dia = @dia;
-	@dia_run = grep /Run/, @dia;
+	@dia_run = grep /Run|Ended|Stop/, @dia;
 	my $sum_diarun = @dia_run;
-	$perc_used_dia = int($sum_diarun*100/$sum_dia);
-	$dia_use = "DIA $sum_diarun/$sum_dia $perc_used_dia";
-	@dia_sort = split / /, $dia_use;
-	#print "$dia_use\n";
-		
+	#print "sum_dia_orig_run:$sum_diarun\n";
+	
 	# number of upd proc
 	@upd = grep /UPD/, @wptable;
 	my $sum_upd = @upd;
-	@upd_run = grep /Run/, @upd;
+	@upd_run = grep /Run|Ended|Stop/, @upd;
 	my $sum_updrun = @upd_run;
-	$perc_used_upd = int($sum_updrun*100/$sum_upd);
-	$upd_use = "UPD $sum_updrun/$sum_upd $perc_used_upd";
-	@upd_sort = split / /, $upd_use;
-	#print "$upd_use\n";
-					
+	
 	# number of enq proc
 	@enq = grep /ENQ/, @wptable;
 	my $sum_enq = @enq;
 	#print "ENQ: $sum_enq\n";
-					
+						
 	# number of BTC proc
 	@btc = grep /BTC/, @wptable;
 	my $sum_btc = @btc;
-	@btc_run = grep /Run/, @btc;
+	@btc_run = grep /Run|Ended|Stop/, @btc;
 	my $sum_btcrun = @btc_run;
-	$perc_used_btc = int($sum_btcrun*100/$sum_btc);
-	$btc_use = "BTC $sum_btcrun/$sum_btc $perc_used_btc";
-	@btc_sort = split / /, $btc_use;
-	#print "$btc_use\n";
-				
+	
 	# number of spool proc
 	@spo = grep /SPO/, @wptable;
 	my $sum_spo = @spo;
-	@spo_run = grep /Run/, @spo;
+	@spo_run = grep /Run|Ended|Stop/, @spo;
 	my $sum_sporun = @spo_run;
-	$perc_used_spo = int($sum_sporun*100/$sum_spo);
-	$spo_use = "SPO $sum_sporun/$sum_spo $perc_used_spo";
-	@spo_sort = split / /, $spo_use;
-	#print "$spo_use\n";
 					
 	# number of up2 proc
 	@up2 = grep /UP2/, @wptable;
 	my $sum_up2 = @up2;
-	#print "SUM_UP2: $sum_up2\n";
+	
+
+	
+	for ( $i=0; $i<$sum_diarun; $i++)
+		{
+			@dia_split_time = split /\,/, $dia_run[$i];
+			if ( $dia_split_time[9] > $conf{diatime} )
+				{
+					if ( $sum_diarun_otime == 0 )
+						{
+							my $sum_diarun_otime = 1;		
+						}
+					$sum_diarun_otime = $sum_diarun_otime + 1;
+				}
+			elsif ( $sum_diarun_otime == 0 )
+				{
+					$sum_diarun_otime = "0";
+				}	
+		}
+	
+		
+	for ( $i=0; $i<$sum_updrun; $i++)
+		{
+			@upd_split_time = split /\,/, $upd_run[$i];
+			if ( $upd_split_time[9] > $conf{updtime} )
+				{
+					if ( $sum_updrun_otime == 0 )
+						{
+							my $sum_updrun_otime = 1;		
+						}
+					$sum_updrun_otime = $sum_updrun_otime + 1;
+				}	
+			elsif ( $sum_updrun_otime == 0 )
+				{
+					$sum_updrun_otime = "0";
+				}
+		}
+	
+	for ( $i=0; $i<$sum_btcrun; $i++)
+		{
+			@btc_split_time = split /\,/, $btc_run[$i];
+			if ( $btc_split_time[9] > $conf{btctime} )
+				{
+					if ( $sum_btcrun_otime == 0 )
+						{
+							my $sum_btcrun_otime = 1;		
+						}
+					$sum_btcrun_otime = $sum_btcrun_otime + 1;
+				}
+			elsif ( $sum_btcrun_otime == 0 )
+				{
+					$sum_btcrun_otime = "0";
+				}
+							
+		}
+	for ( $i=0; $i<$sum_sporun; $i++)
+		{
+			@spo_split_time = split /\,/, $spo_run[$i];
+			if ( $spo_split_time[9] > $conf{spotime} )
+				{
+					if ( $sum_sporun_otime == 0 )
+						{
+							my $sum_sporun_otime = 1;		
+						}
+					$sum_sporun_otime = $sum_sporun_otime + 1;
+				}
+			elsif ( $sum_sporun_otime == 0 )
+				{
+					$sum_sporun_otime = "0";
+				}		
+		}	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+
+# calculating measured data
+		
+	if ( $sum_diarun == "0" )
+		{
+			$sum_diarun_otime = "0";
+		}
+
+	if ( $sum_diarun_otime == 0 )
+		{
+			$perc_used_dia = "0";
+		}
+	else
+		{
+			$perc_used_dia = int($sum_diarun_otime*100/$sum_dia);	
+		}		
+	$dia_use = "DIA $sum_diarun_otime/$sum_dia $perc_used_dia";
+	@dia_sort = split / /, $dia_use;
+	#print "$dia_use\n";
+	
+	
+			
+	
+	
+	if ( $sum_updrun == "0" )
+		{
+			$sum_updrun_otime = "0";
+		}
+	if ( $sum_updrun_otime == 0 )
+		{
+			$perc_used_upd = "0";
+		}
+	else
+		{
+			$perc_used_upd = int($sum_updrun_otime*100/$sum_upd);
+		};
+	$upd_use = "UPD $sum_updrun_otime/$sum_upd $perc_used_upd";
+	@upd_sort = split / /, $upd_use;
+	#print "$upd_use\n";
+	
+	
+					
+	
+
+	
+	if ( $sum_btcrun == "0" )
+		{
+			$sum_btcrun_otime = "0";
+		}
+	if ( $sum_btcrun_otime == "0")
+		{
+			$perc_used_btc = "0";
+		}
+	else
+		{
+			$perc_used_btc = int($sum_btcrun_otime*100/$sum_btc);		
+		};
+	$btc_use = "BTC $sum_btcrun_otime/$sum_btc $perc_used_btc";
+	@btc_sort = split / /, $btc_use;
+	#print "$btc_use\n";
+				
+		
+				
+	
+	if ( $sum_sporun == "0" )
+		{
+			$sum_sporun_otime = "0";
+		}
+	if ( $sum_sporun_otime == "0" )
+		{
+			$perc_used_spo = "0";
+		}
+	else
+		{
+			$perc_used_spo = int($sum_sporun_otime*100/$sum_spo);		
+		};
+	$spo_use = "SPO $sum_sporun_otime/$sum_spo $perc_used_spo";
+	@spo_sort = split / /, $spo_use;
+	#print "$spo_use\n";
+		
+		
+		
+
 	if ( $sum_up2 > 0 )
 		{
 			@up2_run = grep /Run/, @up2;
 			my $sum_up2run = @up2_run;
-			$perc_used_up2 = int($sum_up2run*100/$sum_up2);
-			$up2_use = "UP2 $sum_up2run/$sum_up2 $perc_used_up2";
+			for ( $i=0; $i<$sum_up2run; $i++)
+				{
+					@up2_split_time = split /\,/, $up2_run[$i];
+					#print "time$i:$up2_split_time[9]\n";
+					if ( $up2_split_time[9] > $conf{updtime} )
+						{
+							if ( $sum_up2run_otime == 0 )
+								{
+									my $sum_up2run_otime = 1;		
+								}
+							$sum_up2run_otime = $sum_up2run_otime + 1;
+						}	
+					elsif ( $sum_up2run_otime == 0 )
+						{
+							$sum_up2run_otime = "0";
+						}	
+				
+				}
+				
+				
+			if ( $sum_up2run == "0" )
+				{
+					$sum_up2run_otime = "0";
+				}
+			if ( $sum_up2run_otime == "0")
+				{
+					$perc_used_up2 = "0";
+				}
+			else
+				{
+					$perc_used_up2 = int($sum_up2run_otime*100/$sum_up2);		
+				};
+			$up2_use = "UP2 $sum_up2run_otime/$sum_up2 $perc_used_up2";
 			@up2_sort = split / /, $up2_use;
 			#print "$up2_use\n";
 		}
@@ -857,6 +1054,8 @@ sub version{
 				print "		-> add a new message about message 'not authorized output'\n";
 				print "		-> change sub sapctrl grep option from -F to -w\n";
 				print "		-> we found sap-systems without up2 processes, now we check the number of up2 processes\n";
+				print "	0.5.6 -> add runtime values for Dialog, Batch, Spool, Update and Update2 processes. Now only the running processes are counted with have reached the runtime value.\n";
+				print "		-> The runtime value can configured in the my conf section\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
