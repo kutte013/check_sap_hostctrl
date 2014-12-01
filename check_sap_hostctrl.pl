@@ -25,9 +25,10 @@ my %conf = (
 	ps			=> "/bin/ps -ef",							# path to ps command
 	usrbin		=> "/usr/bin",								# path to /usr/bin
 	diatime		=> "5",										# timevalue for dialogprocesses, only the dialogprocesses with a runtime over 5 sec. are interrested
-	btctime		=> "1800",									# timevalue for batchprocesses, only the batchprocesses with a runtime over 30 sec. are interrested
-	updtime		=> "30",									# timevalue for upd- and up2 processes, only the upd- and up2-processes with a runtime over 5 sec. are interrested
-	spotime		=> "60",
+	btctime		=> "1800",									# timevalue for batchprocesses, only the batchprocesses with a runtime over 1800 sec. are interrested
+	updtime		=> "30",									# timevalue for upd- and up2 processes, only the upd- and up2-processes with a runtime over 30 sec. are interrested
+	spotime		=> "60",									# timevalue for spool processes, only the spoolprocesses with a runtime over 60 sec. are interrested
+	enqtime		=> "60",									# timevalue for enqueu processes, only the enque-processes with a runtime over 60 sec. are interrested
 	);
 
 
@@ -306,8 +307,7 @@ sub abapgetwptable{
 	# number of enq proc
 	@enq = grep /ENQ/, @wptable;
 	my $sum_enq = @enq;
-	#print "ENQ: $sum_enq\n";
-						
+									
 	# number of BTC proc
 	@btc = grep /BTC/, @wptable;
 	my $sum_btc = @btc;
@@ -323,6 +323,7 @@ sub abapgetwptable{
 	# number of up2 proc
 	@up2 = grep /UP2/, @wptable;
 	my $sum_up2 = @up2;
+	
 	
 
 	
@@ -501,7 +502,7 @@ sub abapgetwptable{
 
 	if ( $sum_up2 > 0 )
 		{
-			@up2_run = grep /Run/, @up2;
+			@up2_run = grep /Run|Ended|Stop/, @up2;
 			my $sum_up2run = @up2_run;
 			for ( $i=0; $i<$sum_up2run; $i++)
 				{
@@ -549,6 +550,34 @@ sub abapgetwptable{
 		}
 		
 	
+	#print "Anzahl ENQ:$sum_enq\n";
+	if ( $sum_enq > 0)
+		{
+			@enq_run = grep /Run|Ended|Stop/, @enq;
+			my $sum_enqrun = @enq_run;
+			for ( $i=0; $i<$sum_enqrun; $i++)
+				{
+					@enq_split_time = split /\,/, $enq_run[$i];
+											
+				}
+		if ( $enq_split_time[9] == "0" )
+			{
+				$enq_runtime = "0";
+				$enq_unit = "s";
+				$enq_out = "ENQ $enq_runtime"."$enq_unit";
+				$enq_perf = "'ENQ'="."$enq_runtime"."$enq_unit";
+				#print "$enq_out|$enq_perf\n";
+			}
+		else
+			{
+				$enq_runtime = "$enq_split_time[9]s";
+				$enq_unit = "s";
+				$enq_out = "ENQ $enq_runtime"."$enq_unit";
+				$enq_perf = "'ENQ'="."$enq_runtime"."$enq_unit";
+				#print "$enq_out|$enq_perf\n";
+			}
+		}		
+	
 	
 	# sort highest alarmlevel, this generate the alarmevent critial, warning or ok 
 	@alarmlevel = ("$perc_used_btc", "$perc_used_dia", "$perc_used_spo", "$perc_used_up2", "$perc_used_upd");
@@ -567,57 +596,73 @@ sub abapgetwptable{
 	@grep_spo = grep /$value/, @spo_sort;
 	
 	
+	
 	if ( @grep_dia != "0" )
 		{
-			$multi_obj = "$dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_obj = "$dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit\n $enq_out";
 			$multi_perf = "'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
-			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
-			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".
-			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".
-			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."$enq_perf";
 			#print "$multi_obj|$multi_perf\n";
 		}
 	elsif ( @grep_btc != "0")
 		{
-			$multi_obj = "$btc_use$perf_unit\n $dia_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_obj = "$btc_use$perf_unit\n $dia_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit\n $enq_out";
 			$multi_perf = "'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
-			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
-			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".
-			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".
-			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."$enq_perf";
 			#print "$multi_obj|$multi_perf\n";
 		}
 	elsif ( @grep_upd != "0")
 		{
-			$multi_obj = "$upd_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_obj = "$upd_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit\n $enq_out";
 			$multi_perf = "'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
-			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
-			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
-			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".
-			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."$enq_perf";
 			#print "$multi_obj|$multi_perf\n";
 		}
 	elsif ( @grep_spo != "0")
 		{
-			$multi_obj = "$spo_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $up2_use$perf_unit";
+			$multi_obj = "$spo_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $up2_use$perf_unit\n $enq_out";
 			$multi_perf = "'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
-			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
-			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
-			","."'$upd_sort[0]'="."$spo_sort[2]"."$perf_unit".
-			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$upd_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."$enq_perf";
 			#print "$multi_obj|$multi_perf\n";
 		}
 	elsif ( @grep_up2 != "0")
 		{
-			$multi_obj = "$up2_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit";
+			$multi_obj = "$up2_use$perf_unit\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $enq_out";
 			$multi_perf = "'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
-			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".
-			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".
-			","."'$upd_sort[0]'="."$spo_sort[2]"."$perf_unit".
-			","."'$spo_sort[0]'="."$up2_sort[2]"."$perf_unit";
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$upd_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$spo_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."$enq_perf";
 			#print "$multi_obj|$multi_perf\n";
 		}
-	
+	elsif ( $enq_runtime >= $conf{enqtime} )
+		{
+			print "hier\n";
+			$multi_obj = "$enq_out\n $dia_use$perf_unit\n $btc_use$perf_unit\n $upd_use$perf_unit\n $spo_use$perf_unit\n $up2_use$perf_unit";
+			$multi_perf = "$enq_perf".
+			","."'$dia_sort[0]'="."$dia_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$btc_sort[0]'="."$btc_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$upd_sort[0]'="."$upd_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$spo_sort[0]'="."$spo_sort[2]"."$perf_unit".";"."$warn".";"."$crit".
+			","."'$up2_sort[0]'="."$up2_sort[2]"."$perf_unit".";"."$warn".";"."$crit";
+		}
 	
 	
 					
@@ -628,24 +673,7 @@ sub abapgetwptable{
 				#print "$wptable[$a]\n";
 				$a += 1;		
 			}		
-	
-	
-	#print "DIALOG-PROC: @dia\n";
-	#print "DIALIG-PROC-RUNNING:@dia_run\n";
-		
-			# detail output of running proc´s, now disabled
-			# idea: use this for detail-analyse of running procs 
-			#$d = 0;
-			#for ( $i=0; $i<$sum_diarun; $i++)
-			#	{
-			#		@run_proc = split /,/, $dia_run[$d];
-			#		print "PROC-ID:$run_proc[2] TIME:$run_proc[9] PROGRAM:$run_proc[10] USER:$run_proc[12] ACT:$run_proc[13] TABLE:$run_proc[14]\n";				
-			#		$d += 1;
-			#	}	
-	
-	
-	
-	
+			
 }
 
 sub sapctrl_ls{
@@ -1056,6 +1084,7 @@ sub version{
 				print "		-> we found sap-systems without up2 processes, now we check the number of up2 processes\n";
 				print "	0.5.6 -> add runtime values for Dialog, Batch, Spool, Update and Update2 processes. Now only the running processes are counted with have reached the runtime value.\n";
 				print "		-> The runtime value can configured in the my conf section\n";
+				print "		-> add ENQ Process with runtime and perfdata\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
