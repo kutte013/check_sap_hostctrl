@@ -1,8 +1,8 @@
-You can check the sap-ccms on ABAP/JAVA/TREX-Systems (other systems not tested).
+Check the sap-ccms on ABAP/JAVA/TREX-Systems (other systems not tested).
 This check don´t use a login to the sap-system. I use the sapcontrol binarie to check the ccms output from sap.
 The sapcontrol is installed on every sap-system with a new sap-kernel.
 
-You can find the tool in the following path:
+The tool s installed on the following path:
 /usr/sap/hostctrl/exe
 
 You can use the sapcontrol for many things. Start,stop, monitoring and so on.....
@@ -13,13 +13,13 @@ The check can monitor
 I have to methodes to use this check.
 
 	1. You must install the hostctrl on the icinga-system.
-	   You can use the sapcontrol-binarie directly from icinga-system without ssh and sudo.
+	   Use the sapcontrol-binarie directly from icinga-system without ssh and sudo.
 	   That is the preferred way!!
 	
 	2. You can use check_by_ssh and use the sapcontrol on the remote-machine
 	   The binary use the account <root> to connect to the system.
 	   This is sap-standard!
-	   You must configure the sudo command on the remote-machine.
+	   Configure the sudo command on the remote-machine.
 	   The check_plugin should only use with your nagios-user and check per ssh the remote-machine.
 	
 	   This is the command ->
