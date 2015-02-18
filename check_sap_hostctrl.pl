@@ -53,6 +53,7 @@ GetOptions(
     "sudo=i"	=> \$sudo,			# use or don´t use sudo
     "host=s"	=> \$host,			# monitored-system
     "user=s"	=> \$user,			# monitoring user on remote-system
+    "pass=s"	=> \$pass,			# password for monitoring-user on remote-system
     "function=s"	=> \$func,			# define the sapcontrol function other then ccms / now: alpha feature
 	);
 
@@ -266,9 +267,23 @@ sub sapctrl_cons{
 		{
 			# use sapcontrol client from nagios-server
 			$command = `$conf{sapcontrol} -host $host -nr $sysnr -function $func`;
-			my $com_grep = grep /FAIL/, $command;
+			my $auth_grep = grep /Unauthorized/, $command;
+			
 			#print "$command\n";
 			#print "$com_grep\n";
+			if ( $auth_grep != 0 )
+				{
+					
+					if ( $user eq undef && $pass eq undef )
+						{
+							print "UNKNOWN: $command\n";
+							print "User or password failed\n";
+							exit 3;
+							
+						}
+					$command = `$conf{sapcontrol} -host $host -nr $sysnr -function $func -user $user $pass`;
+					my $com_grep = grep /FAIL|Unknown/, $command;
+				}
 			if ( $com_grep != 0 )
 				{
 					print "UNKNOWN - $command\n";
@@ -278,7 +293,11 @@ sub sapctrl_cons{
 				{
 					abapgetwptable();
 					nagroutine_out();
-					
+				}
+			elsif ( $func eq "GetVersionInfo" )
+				{
+					getversioninfo();
+					#nagroutine_out();
 				}			
 		}
 }
@@ -676,6 +695,11 @@ sub abapgetwptable{
 			
 }
 
+
+sub getversioninfo{
+	print "OUTPUT: $command\n";
+}
+
 sub sapctrl_ls{
 	if ( $meth eq "ls" )
 			{
@@ -1027,6 +1051,18 @@ sub help{
 			print "			Or you must install the hostctrl on the icinga-system.\n";
 			print "				You can use the sapcontrol-binarie directly from icinga-system without ssh and sudo.\n";
 			print "				That is the preferred way!!\n";
+			print "				The sapcontrol-binarie is an component of the sap hostcontrol-system. The newer sap-system must use the hostcontrol-service with sapstartsrv.\n";
+			print "				Systax to test the connection from icinga-sapcontrol to remote-system with:\,";
+			print "					/<path_to_binarie>/sapcontrol -host <sap-hostname> -nr <sysnr> -function GetVersionInfo\n";
+			print "					Attention: on the newer sap-kernel releases beginning 7.30 you have a new security-feature of sapcontrol.\n";
+			print "					Only the <sid>adm can use the sapcontrol binarie or you must allow another user to use the sapcontrol binarie\n";
+			print "					Errormessage: FAIL: HTTP error, HTTP/1.1 401 Unauthorized\n";
+			print "\n";
+			print "					/<path_to_binarie>/sapcontrol -host <sap-hostname> -nr <sysnr> -function GetVersionInfo -user <user> <pass>\n";
+			print "					If you don´t want use the <sid>adm you must define in the sap-profile another user!\n";
+			print "					Please greate in /sapmnt/<SID>/profile/<SID>_DVEBMGS_<HOSTNAME> a new value -> service/admin_users = <USERNAME>\n";
+			print "					To activate the the parameter you must restarte the sapstartsrv process with the following command:\n";
+			print "					/<ON_REMOTE_SAP_SYSTEM_PATH>/sapcontrol -nr 62 -function RestartService -> the command only restart the sapstartsrv not the sap-system\n";
 			print "\n";
 			print "	Monitoring-Objects:\n";
 			print "		If you want other monitoring objects from ccms, please use the command:\n";
@@ -1085,6 +1121,7 @@ sub version{
 				print "	0.5.6 -> add runtime values for Dialog, Batch, Spool, Update and Update2 processes. Now only the running processes are counted with have reached the runtime value.\n";
 				print "		-> The runtime value can configured in the my conf section\n";
 				print "		-> add ENQ Process with runtime and perfdata\n";
+				print "		-> add user and password for sapcontrol-checks with sap-kernel newer 7.3\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
