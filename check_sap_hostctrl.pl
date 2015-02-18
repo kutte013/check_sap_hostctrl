@@ -937,7 +937,7 @@ sub help{
 			{
 			print "\n";
 			print "Usage:\n";
-			print "	check_host_ctrl.pl -host <HOSTNAME only with local sapcontrol> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls|cons> -<obj|function> <MONITORING-OBJEKT> -backend <abap|java|trex|multi> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC> -sudo <0|1>\n";
+			print "	check_host_ctrl.pl -host <HOSTNAME only with local sapcontrol> -sysnr <SAP-SYS-NR> -meth <sap|nag|ls|cons> -<obj|function> <MONITORING-OBJEKT> -backend <abap|java|trex|multi> -w <WARNING-LEVEL> -c <CRITICAL-LEVEL> -t <TIME_IN_SEC> -sudo <0|1> -user <USER> -pass <PASS>\n";
 			print "\n";
 			print "Optionen:\n";
 			print "\n";
@@ -1080,7 +1080,7 @@ sub help{
 			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth ls\n";
 			print "		List all montoring-objects from the backend\n";
 			print "\n";
-			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth ls -sudo 1\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth ls -sudo 1 -user <USER>\n";
 			print "		List all monitoring-objects from backend, but use the sapcontrol binarie from backend-system with ssh connection and sudo command\n";
 			print "\n";
 			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth sap -obj CacheHits -backend abap\n";
@@ -1090,7 +1090,10 @@ sub help{
 			print "		Output of sap-abap cachehits with alarmlevel from nagios-system\n";
 			print "\n";
 			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth cons -function ABAPGetWPTable -backend multi -w 80 -c 90\n";
-			print "		Output of sap-processes, DIA-Usage, BTC-Usage, SPO-Usage, UPD-Usage, UP2-Usage\n";
+			print "		Output of sap-processes, DIA-Usage, BTC-Usage, SPO-Usage, UPD-Usage, UP2-Usage for SAP-Systems with Kernel less 7.30\n";
+			print "\n";
+			print "	check_host_ctrl.pl -host <host> -sysnr 00 -meth cons -function ABAPGetWPTable -backend multi -w 80 -c 90 -user <USER> -pass <PASS>\n";
+			print "		Output of sap-processes, DIA-Usage, BTC-Usage, SPO-Usage, UPD-Usage, UP2-Usage for SAP-Systems with Kernel up to 7.30\n";
 			print "\n";
 	}
 }

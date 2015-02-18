@@ -15,6 +15,24 @@ I have to methodes to use this check.
 	1. You must install the hostctrl on the icinga-system.
 	   Use the sapcontrol-binarie directly from icinga-system without ssh and sudo.
 	   That is the preferred way!!
+
+	   The sapcontrol-binarie is an component of the sap hostcontrol-system. The newer sap-system must use the hostcontrol-service with sapstartsrv.
+
+           Systax to test the connection from icinga-sapcontrol to remote-system with:
+           /<path_to_binarie>/sapcontrol -host <sap-hostname> -nr <sysnr> -function GetVersionInfo
+
+           Attention: on the newer sap-kernel releases beginning 7.30 you have a new security-feature of sapcontrol.
+
+           Only the <sid>adm can use the sapcontrol binarie or you must allow another user to use the sapcontrol binarie
+
+           Errormessage: FAIL: HTTP error, HTTP/1.1 401 Unauthorized
+           /<path_to_binarie>/sapcontrol -host <sap-hostname> -nr <sysnr> -function GetVersionInfo -user <user> <pass>
+
+           If you don´t want use the <sid>adm you must define in the sap-profile another user
+           Please greate in /sapmnt/<SID>/profile/<SID>_DVEBMGS_<HOSTNAME> a new value -> service/admin_users = <USERNAME>
+           To activate the the parameter you must restarte the sapstartsrv process with the following command:
+           /<ON_REMOTE_SAP_SYSTEM_PATH>/sapcontrol -nr 62 -function RestartService -> the command only restart the sapstartsrv not the sap-system
+
 	
 	2. You can use check_by_ssh and use the sapcontrol on the remote-machine
 	   The binary use the account <root> to connect to the system.
