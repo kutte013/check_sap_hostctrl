@@ -1,0 +1,18 @@
+name: check_sap_hostctrl
+description: "file:///README.md"
+url: "https://github.com/kutte013/check_sap_hostctrl"
+tags: Statistic
+vendor: Linux
+target: Operating System
+type: Plugin
+license: gplv2
+releases: 
+  - 
+    name: 0.56
+    description: "0.56 Release"
+    files: 
+      - 
+        name: check_sap_hostctrl.pl
+        url: "file:///check_sap_hostctrl.pl"
+        description: "Release 0.56"
+        checksum: d0ceecd2181e586dc579f1ac94969a0e
