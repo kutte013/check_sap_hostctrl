@@ -1,9 +1,7 @@
 name: check_sap_hostctrl
 description: "file:///README.md"
 url: "https://github.com/kutte013/check_sap_hostctrl"
-tags: Statistic
-vendor: Linux
-target: Operating System
+target: SAP
 type: Plugin
 license: gplv2
 releases: 
