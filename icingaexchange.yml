@@ -1,6 +1,8 @@
 name: check_sap_hostctrl
 description: "file:///README.md"
 url: "https://github.com/kutte013/check_sap_hostctrl"
+vendor: Linux
+tags: SAP, CCMS, Workload-SAP-Processes
 target: SAP
 type: Plugin
 license: gplv2
