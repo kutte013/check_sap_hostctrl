@@ -1,6 +1,6 @@
-# Check SAP-Systems CCMS, Workload-SAP-Processes
+# Check SAP-Systems CCMS on ABAP, JAVA and TREX, Workload-SAP-Processes, ICM Connections
 
-Check the sap-ccms on ABAP/JAVA/TREX-Systems and Workload of Dialog, Batch, UPD, ENQ Processes.
+Workload of Dialog, Batch, UPD, ENQ Processes Processes
 This check don´t use a login to the sap-system. I use the sapcontrol binarie to check the ccms output from sap.
 The sapcontrol is installed on every sap-system with a new sap-kernel.
 
@@ -10,7 +10,8 @@ The tool is installed on the following path:
 You can use the sapcontrol for many things. Start,stop, monitoring and so on.....
 The check can monitor 
 	# sap-ccms 
-	# utilization of the abap-processes ( Dialog, Batch, Spool, Update, Update2, Enqueu ).
+	# Utilization of the abap-processes ( Dialog, Batch, Spool, Update, Update2, Enqueu ).
+	# SAP-ICM Connections
 
 I have to methodes to use this check.
 
@@ -63,7 +64,7 @@ I have to methodes to use this check.
 
 
 ### Usage:
-	check_host_ctrl.pl -host < HOSTNAME > -sysnr < SYSNR > -meth < sap|nag|ls|cons > -< obj|function > < MONITORING-OBJEKT > -backend < abap|java|trex|multi > -w < WARNING-LEVEL > -c < CRITICAL-LEVEL > -t < TIME_IN_SEC > -sudo < 0|1 >
+	check_host_ctrl.pl -host < HOSTNAME > -sysnr < SYSNR > -meth < sap|nag|ls|cons > -< obj|function > < MONITORING-OBJEKT > -backend < abap|java|trex|multi > -w < WARNING-LEVEL > -c < CRITICAL-LEVEL > -t < TIME_IN_SEC > -sudo < 0|1 > -user < user > -pass < password >
 			
 ### Optionen:
 	
@@ -131,7 +132,8 @@ I have to methodes to use this check.
 				Build               -> TREX Version
 			
 	-function: use this with -meth: cons
-		ABAPGetWPTable -> Processtable of sap-system ( dia-proc, btc-proc, upd-proc, spo-proc, up2-proc )
+		ABAPGetWPTable      -> Processtable of sap-system ( dia-proc, btc-proc, upd-proc, spo-proc, up2-proc )
+		ICMGetConnectionList-> Number if ICM Connections
 			
 	-backend: Type of sap-backend system
 		abap: abap-backend-system
@@ -149,6 +151,11 @@ I have to methodes to use this check.
 		This parameter is optional. 
 		If you set the parameter to 1 the icinga-system check with ssh and sudo command on remote-site
 			
+	-user: < user >
+	    You can use this paramter for the sap-kernels newer then 7.21
+	-pass: < password >
+	    You can use this paramter for the sap-kernels newer then 7.21
+	    
 	Help:
 		Error:
 			GetAlertTree FAIL: NIECONN_REFUSED (Connection refused), NiRawConnect failed in plugin_fopen -> The sap-system-nr is incorrect.
@@ -190,6 +197,10 @@ I have to methodes to use this check.
 			
 			check_host_ctrl.pl -host <host> -sysnr 00 -meth cons -function ABAPGetWPTable -backend multi -w 80 -c 90
 				Output of sap-processes, DIA-Usage, BTC-Usage, SPO-Usage, UPD-Usage, UP2-Usage
+				
+			check_host_ctrl.pl -host <host> -sysnr 00 -meth cons -function ABAPGetWPTable -backend multi -w 80 -c 90 -user <USER> -pass <PASS>
+			
+			    Output of sap-processes, DIA-Usage, BTC-Usage, SPO-Usage, UPD-Usage, UP2-Usage
 			
 
 
