@@ -141,8 +141,50 @@ sub precheck{
 		}
 	else
 		{
-			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetSystemInstanceList`;
-			my $rc_command = $?;
+			$command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetVersionInfo`;
+			$rc_command = $?;
+			$auth_grep = grep /Unauthorized/, $command;
+			$conn_grep = grep /NIECONN_REFUSED/, $command;
+			$host_grep = grep /NIEHOST_UNKNOWN/, $command;
+			
+			if ( $auth_grep != 0 )
+				{
+					
+					if ( $user eq undef && $pass eq undef )
+						{
+							print "UNKNOWN: $command\n";
+							print "User or password failed!\n";
+							exit 3;
+						}
+					else
+						{
+							$command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetVersionInfo -user $user $pass`;
+							$rc_command = $?;
+							$inv_grep = grep /FAIL/, $command;
+							if ( $inv_grep != 0)
+								{
+									print "UNKNOWN: $command\n";
+									print "See error message!!\n";
+									exit 3;
+								}
+						}
+				}
+			
+			if ( $conn_grep != 0 )
+				{
+					print "UNKNOWN: $command\n";
+					print "Correct your Systemnumber!!\n";
+					exit 3;
+				}
+			elsif ( $host_grep != 0 )
+				{
+					print "UNKNOWN: $command\n";
+					print "Correct your Hostname!!\n";
+					exit 3;
+						
+				}
+			
+											
 			if ( $rc_command > "0" )
 				{
 					print "UNKNWON - sapstart not working on host: $host or the systemnumber is wrong.\n";
@@ -163,11 +205,13 @@ sub sapctrl{
 			my $command = `ssh $host -l $user "$conf{sudo} '$conf{sapcontrol} -nr $sysnr -function GetAlertTree' | $conf{usrbin}/grep -F '$obj'"`;
 			$rc_command = $?;
 			#print "$command\n";
+								
 			if ( $rc_command > "0" )
 				{
 					precheck();
 				}
 			#print "rc->$rc_command\n";
+			
 			chomp $command;
 			chomp $rc_command;
 			@command_split = split /,/, $command;
@@ -188,14 +232,34 @@ sub sapctrl{
 	else
 		{
 			#use sapcontrol on icinga-host
-			my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree | $conf{usrbin}/grep -w '$obj'`;
-			$rc_command = $?;
-			if ( $rc_command > "0" )
-				{
-					precheck();
+			precheck();
+			#print "var: $auth_grep\n";
+			
+			if ( $auth_grep == "0" )
+				{			
+					$command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree | $conf{usrbin}/grep -w '$obj'`;
+					$rc_command = $?;
+			
+					if ( $rc_command > "0" )
+						{
+							print "UNKNOWN - $command\n";
+							exit 3;
+						}		
 				}
+			else
+				{
+					$command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree -user $user $pass | $conf{usrbin}/grep -w '$obj'`;
+					$rc_command = $?;
+			
+					if ( $rc_command > "0" )
+						{
+							print "UNKNOWN - $command\n";
+							exit 3;
+						}	
+				}
+					
 			#print "output->$command\n";
-			#rint "rc->$rc_command\n";
+			#print "rc->$rc_command\n";
 			chomp $command;
 			chomp $rc_command;
 			@command_split = split /,/, $command;
@@ -262,6 +326,11 @@ sub sapctrl_cons{
 					nagroutine_out();
 					
 				}
+			elsif ( $func eq "ICMGetConnectionList" )
+				{
+					icmgetconlist();
+					nagroutine_out();
+				}
 		}
 	else
 		{
@@ -292,6 +361,11 @@ sub sapctrl_cons{
 			if ( $func eq "ABAPGetWPTable" )
 				{
 					abapgetwptable();
+					nagroutine_out();
+				}
+			elsif ( $func eq "ICMGetConnectionList" )
+				{
+					icmgetconlist();
 					nagroutine_out();
 				}
 			elsif ( $func eq "GetVersionInfo" )
@@ -414,27 +488,7 @@ sub abapgetwptable{
 					$sum_sporun_otime = "0";
 				}		
 		}	
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+			
 		
 
 # calculating measured data
@@ -695,6 +749,21 @@ sub abapgetwptable{
 			
 }
 
+sub icmgetconlist{
+	@icmconnections = split /\n/, $command;
+	$sum = @icmconnections;
+	$value = $sum - 5;
+	
+	my $icmcon = grep /FAILED/, $command;
+	print "$icmcon\n";
+	if ( $icmcon == 1 )
+		{
+			print "yeah\n";
+		}
+		
+	$multi_obj = "ICM Connections: $value";
+	$multi_perf = "CONN=$value";
+}
 
 sub getversioninfo{
 	print "OUTPUT: $command\n";
@@ -724,6 +793,35 @@ sub sapctrl_ls{
 					{
 						#use sapcontrol on icinga-host
 						my $command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree`;
+						
+						my $auth_grep = grep /Unauthorized/, $command;
+			
+			
+						if ( $auth_grep != 0 )
+							{
+					
+								if ( $user eq undef && $pass eq undef )
+									{
+										print "UNKNOWN: $command\n";
+										print "User or password failed\n";
+										exit 3;
+									}
+								$command = `$conf{sapcontrol} -host $host -nr $sysnr -function GetAlertTree -user $user $pass`;
+								my $com_grep = grep /FAIL|Unknown/, $command;
+							}
+			
+			if ( $com_grep != 0 )
+				{
+					print "UNKNOWN - $command\n";
+					exit 3;
+				}
+						
+						
+						
+						
+						
+						
+						
 						my $com_grep = grep /FAIL/, $command;
 						#print "$command\n";
 						#print "$com_grep\n";
@@ -1005,7 +1103,8 @@ sub help{
 			print "			Build				-> TREX Version\n";
 			print "\n";
 			print "	-function: use this with -meth: cons\n";
-			print "		ABAPGetWPTable -> Processtable of sap-system ( dia-proc, btc-proc, upd-proc, spo-proc, up2-proc )\n";
+			print "		ABAPGetWPTable 		-> Processtable of sap-system ( dia-proc, btc-proc, upd-proc, spo-proc, up2-proc )\n";
+			print "		ICMGetConnectionList	-> Number if ICM Connections\n";
 			print "\n";
 			print "	-backend: Type of sap-backend system\n";
 			print "		abap: abap-backend-system\n";
@@ -1022,6 +1121,12 @@ sub help{
 			print "	-sudo: 1\n";
 			print "		This parameter is optional. You can use it if you start the sapcontrol check off remote host not on icinga-system.\n";
 			print "		If you set the parameter to 1 the icinga-system check with ssh and sudo command on remote-site\n";
+			print "\n";
+			print " -user: <user>\n";
+			print "		You can use this paramter for the sap-kernels newer then 7.21\n";
+			print "	-pass: <password>\n";
+			print "		You can use this paramter for the sap-kernels newer then 7.21\n";
+			print "\n";
 			print "\n";
 			print "Help:\n";
 			print "	Error:\n";
@@ -1125,6 +1230,11 @@ sub version{
 				print "		-> The runtime value can configured in the my conf section\n";
 				print "		-> add ENQ Process with runtime and perfdata\n";
 				print "		-> add user and password for sapcontrol-checks with sap-kernel newer 7.3\n";
+				print "	0.5.7 -> add new cons check -> ICMGetConnectionList (list the number of icm connections\n";
+				print "		-> add the user and password policy for the new sap-kernel (greater 7.21) for all checks (in ver. 0.5.6 only works with ABAPGetWPTable)\n";
+				print "			-> add sub precheck user and pass for sap-kernel (greater the 7.21)\n";
+				print "			-> add sub sapctrl user and pass for sap-kernel (greater the 7.21)\n";
+				print "			-> add sub sapctrl_ls user and pass for sap-kernel (greater the 7.21)\n";
 				print "\n";
 				print "For changes, ideas or bugs please contact kutte013\@gmail.com\n";
 				print "\n";
